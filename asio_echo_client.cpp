@@ -2,7 +2,7 @@
 //
 
 //#include "pch.h"
-#include "asiio_echo_client.h"
+#include "asio_echo_client.h"
 
 std::size_t session_t::read_size = 2;
 std::size_t session_t::write_size = 2;
@@ -35,13 +35,14 @@ void read_handler(const error_code_t &ec,
 	}
 	else
 	{
-		session->read_offset += size;
+		auto &read_offset = session->read_offset;
+		read_offset += size;
 		auto &buffer = session->buffer;
 		auto &socket = session->socket;
 
 		INFO("log", "session->size:{0} g_one_size:{1} size:{2}", session->read_offset, session_t::read_size, size);
 
-		if (size < session_t::read_size)
+		if (buffer[read_offset - 1] == '\0')
 		{
 			INFO("log");
 			vector<char> buff;
@@ -50,19 +51,9 @@ void read_handler(const error_code_t &ec,
 			INFO("log", "async_read_some:{0}", buff.data());
 			session->clear();
 
-			string message;
-			if (getline(cin, message))
-			{
-				INFO("log", "message:{0}", message);
-
-				vector<char> vec;
-				copy_n(message.begin(), message.size(), back_inserter(vec));
-				session->write_queue.push(std::move(vec));
-
-				async_write(session, io_context, write_handler);
-			}
+			getline(session, io_context);
 		}
-		else if (size == session_t::read_size)
+		else
 		{
 			INFO("log");
 			async_read(session, io_context, read_handler);
@@ -107,6 +98,22 @@ void write_handler(const error_code_t &ec,
 	}
 }
 
+void getline(shared_ptr<session_t> session, io_context_t &io_context)
+{
+	string message;
+	if (std::getline(cin, message))
+	{
+		INFO("log", "message:{0}", message);
+
+		vector<char> vec;
+		copy_n(message.begin(), message.size(), back_inserter(vec));
+		vec.push_back('\0');
+		session->write_queue.push(std::move(vec));
+
+		async_write(session, io_context, write_handler);
+	}
+}
+
 int main()
 {
 	auto logger = spdlog::stdout_color_mt("log");
@@ -132,17 +139,7 @@ int main()
 			cout << port << endl;
 			INFO("log", "address:{0} port:{1}", address, port);
 
-			string message;
-			if (getline(cin, message))
-			{
-				INFO("log", "message:{0}", message);
-
-				vector<char> vec;
-				copy_n(message.begin(), message.size(), back_inserter(vec));
-				session->write_queue.push(std::move(vec));
-
-				async_write(session, io_context, write_handler);
-			}
+			getline(session, io_context);
 		}
 	});
 
