@@ -44,6 +44,8 @@ public:
 	queue<vector<char>> write_queue;
 	string address;
 	uint16_t port = 0;
+	bool is_write = false;
+	bool is_read = false;
 
 	void clear();
 
@@ -55,42 +57,47 @@ private:
 };
 
 template<typename H>
-bool async_write(shared_ptr<session_t> session, io_context_t &io_context, H handler)
+bool async_write(shared_ptr<session_t> session, H handler)
 {
 	INFO("log");
 	auto &socket = session->socket;
 	auto &write_queue = session->write_queue;
+
 	if (!write_queue.empty())
 	{
 		auto &front = write_queue.front();
 		auto &write_offset = session->write_offset;
-		auto size = std::min(session_t::write_size, front.size() - write_offset);
-		socket.async_write_some(
-			asio::buffer(front.data() + write_offset, size),
-			[session, &io_context, handler](const error_code_t &ec, std::size_t size)
+		auto &is_write = session->is_write;
+		if (!is_write)
 		{
-			handler(ec, size, session, io_context);
-		});
-		return true;
+			auto size = std::min(session_t::write_size, front.size() - write_offset);
+			is_write = true;
+			socket.async_write_some(
+				asio::buffer(front.data() + write_offset, size),
+				handler);
+			return true;
+		}
 	}
-	else
-	{
-		return false;
-	}
+	return false;
 }
 
 template<typename H>
-void async_read(shared_ptr<session_t> session, io_context_t &io_context, H handler)
+bool async_read(shared_ptr<session_t> session, H handler)
 {
 	INFO("log");
 	auto &buffer = session->buffer;
 	auto &socket = session->socket;
 	auto &read_offset = session->read_offset;
-	buffer.resize(read_offset + session_t::read_size);
-	socket.async_read_some(
-		asio::buffer(buffer.data() + read_offset, session_t::read_size),
-		[session, &io_context, handler](const error_code_t &ec, std::size_t size)
+	auto &is_read = session->is_read;
+
+	if (!is_read)
 	{
-		handler(ec, size, session, io_context);
-	});
+		buffer.resize(read_offset + session_t::read_size);
+		is_read = true;
+		socket.async_read_some(
+			asio::buffer(buffer.data() + read_offset, session_t::read_size),
+			handler);
+		return true;
+	}
+	return false;
 }
