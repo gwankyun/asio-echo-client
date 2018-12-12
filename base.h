@@ -9,6 +9,7 @@
 #include <vector>
 #include <algorithm>
 #include <queue>
+#include <functional>
 
 #include <boost/asio.hpp>
 
@@ -31,7 +32,9 @@ using acceptor_t = tcp_t::acceptor;
 using resolver_t = tcp_t::resolver;
 using error_code_t = boost::system::error_code;
 
-class session_t
+class application_t;
+
+class session_t : public std::enable_shared_from_this<session_t>
 {
 public:
 	session_t(io_context_t &io_context);
@@ -46,8 +49,11 @@ public:
 	uint16_t port = 0;
 	bool is_write = false;
 	bool is_read = false;
+	shared_ptr<application_t> app;
 
 	void clear();
+	void run();
+	error_code_t close();
 
 	static std::size_t read_size;
 	static std::size_t write_size;
@@ -55,6 +61,57 @@ public:
 private:
 
 };
+
+session_t::session_t(io_context_t &io_context)
+	: socket(io_context)
+{
+}
+
+session_t::~session_t()
+{
+	INFO("log", "address:{0} port:{1}", address, port);
+}
+
+void session_t::clear()
+{
+	INFO("log");
+	buffer.clear();
+	read_offset = 0;
+}
+
+error_code_t session_t::close()
+{
+	INFO("log");
+	error_code_t ec;
+	socket.close(ec);
+	return ec;
+}
+
+class application_t
+{
+public:
+	application_t();
+	~application_t();
+
+	io_context_t io_context;
+	void run();
+
+private:
+
+};
+
+application_t::application_t()
+{
+}
+
+application_t::~application_t()
+{
+}
+
+void application_t::run()
+{
+	io_context.run();
+}
 
 template<typename H>
 bool async_write(shared_ptr<session_t> session, H handler)

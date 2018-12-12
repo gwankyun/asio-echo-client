@@ -7,20 +7,12 @@
 std::size_t session_t::read_size = 2;
 std::size_t session_t::write_size = 2;
 
-session_t::session_t(io_context_t &io_context)
-	: socket(io_context)
-{
-}
-
-session_t::~session_t()
-{
-}
-
-void session_t::clear()
+void session_t::run()
 {
 	INFO("log");
-	buffer.clear();
-	read_offset = 0;
+	auto self(shared_from_this());
+	auto app = self->app;
+	getline(self, app);
 }
 
 void read_handler(const error_code_t &ec,
@@ -32,7 +24,8 @@ void read_handler(const error_code_t &ec,
 	if (ec)
 	{
 		INFO("log", ec.message());
-		exit(1);
+		session->close();
+		return;
 	}
 	else
 	{
@@ -65,7 +58,7 @@ void read_handler(const error_code_t &ec,
 			});
 			if (!r)
 			{
-				app->io_context.run();
+				app->run();
 				return;
 			}
 		}
@@ -81,7 +74,8 @@ void write_handler(const error_code_t &ec,
 	if (ec)
 	{
 		INFO("log", ec.message());
-		exit(1);
+		session->close();
+		return;
 	}
 	else
 	{
@@ -110,7 +104,7 @@ void write_handler(const error_code_t &ec,
 				});
 				if (!r)
 				{
-					app->io_context.run();
+					app->run();
 					return;
 				}
 				return;
@@ -123,7 +117,7 @@ void write_handler(const error_code_t &ec,
 		});
 		if (!w)
 		{
-			app->io_context.run();
+			app->run();
 			return;
 		}
 	}
@@ -148,7 +142,7 @@ void getline(shared_ptr<session_t> session, shared_ptr<application_t> app)
 		});
 		if (!w)
 		{
-			app->io_context.run();
+			app->run();
 			return;
 		}
 	}
@@ -157,35 +151,36 @@ void getline(shared_ptr<session_t> session, shared_ptr<application_t> app)
 int main()
 {
 	auto logger = spdlog::stdout_color_mt("log");
-	//application_t app;
 	auto app = make_shared<application_t>();
 	auto &io_context = app->io_context;
 
-	auto session = make_shared<session_t>(app->io_context);
-	auto &socket = session->socket;
-
-	socket.async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500), 
-		[session, app](const error_code_t &ec)
 	{
-		if (ec)
+		auto session = make_shared<session_t>(app->io_context);
+		auto &socket = session->socket;
+
+		socket.async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500),
+			[session, app](const error_code_t &ec)
 		{
-			INFO("log", ec.message());
-		}
-		else
-		{
-			auto &socket = session->socket;
-			auto re = socket.remote_endpoint();
-			auto address = re.address().to_string();
-			auto port = re.port();
-			cout << address << endl;
-			cout << port << endl;
-			INFO("log", "address:{0} port:{1}", address, port);
+			if (ec)
+			{
+				INFO("log", ec.message());
+			}
+			else
+			{
+				session->app = app;
+				auto &socket = session->socket;
+				auto re = socket.remote_endpoint();
+				auto address = re.address().to_string();
+				auto port = re.port();
+				cout << address << endl;
+				cout << port << endl;
+				INFO("log", "address:{0} port:{1}", address, port);
 
-			getline(session, app);
-		}
-	});
+				session->run();
+			}
+		});
+	}
 
-	io_context.run();
-
+	app->run();
 	return 0;
 }
