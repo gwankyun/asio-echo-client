@@ -26,7 +26,7 @@ void session_t::clear()
 void read_handler(const error_code_t &ec,
 	std::size_t size,
 	shared_ptr<session_t> session,
-	application_t &app)
+	shared_ptr<application_t> app)
 {
 	INFO("log");
 	if (ec)
@@ -59,13 +59,13 @@ void read_handler(const error_code_t &ec,
 		{
 			INFO("log");
 			auto r = async_read(session,
-				[session, &app](const error_code_t &ec, std::size_t size)
+				[session, app](const error_code_t &ec, std::size_t size)
 			{
 				read_handler(ec, size, session, app);
 			});
 			if (!r)
 			{
-				app.io_context.run();
+				app->io_context.run();
 				return;
 			}
 		}
@@ -75,7 +75,7 @@ void read_handler(const error_code_t &ec,
 void write_handler(const error_code_t &ec,
 	std::size_t size,
 	shared_ptr<session_t> session,
-	application_t &app)
+	shared_ptr<application_t> app)
 {
 	INFO("log");
 	if (ec)
@@ -104,13 +104,13 @@ void write_handler(const error_code_t &ec,
 			{
 				session->clear();
 				auto r = async_read(session,
-					[session, &app](const error_code_t &ec, std::size_t size)
+					[session, app](const error_code_t &ec, std::size_t size)
 				{
 					read_handler(ec, size, session, app);
 				});
 				if (!r)
 				{
-					app.io_context.run();
+					app->io_context.run();
 					return;
 				}
 				return;
@@ -123,13 +123,13 @@ void write_handler(const error_code_t &ec,
 		});
 		if (!w)
 		{
-			app.io_context.run();
+			app->io_context.run();
 			return;
 		}
 	}
 }
 
-void getline(shared_ptr<session_t> session, application_t &app)
+void getline(shared_ptr<session_t> session, shared_ptr<application_t> app)
 {
 	string message;
 	if (std::getline(cin, message))
@@ -142,13 +142,13 @@ void getline(shared_ptr<session_t> session, application_t &app)
 		session->write_queue.push(std::move(vec));
 
 		auto w = async_write(session,
-			[session, &app](const error_code_t &ec, std::size_t size)
+			[session, app](const error_code_t &ec, std::size_t size)
 		{
 			write_handler(ec, size, session, app);
 		});
 		if (!w)
 		{
-			app.io_context.run();
+			app->io_context.run();
 			return;
 		}
 	}
@@ -157,14 +157,15 @@ void getline(shared_ptr<session_t> session, application_t &app)
 int main()
 {
 	auto logger = spdlog::stdout_color_mt("log");
-	application_t app;
-	auto &io_context = app.io_context;
+	//application_t app;
+	auto app = make_shared<application_t>();
+	auto &io_context = app->io_context;
 
-	auto session = make_shared<session_t>(app.io_context);
+	auto session = make_shared<session_t>(app->io_context);
 	auto &socket = session->socket;
 
 	socket.async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500), 
-		[session, &app](const error_code_t &ec)
+		[session, app](const error_code_t &ec)
 	{
 		if (ec)
 		{
