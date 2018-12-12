@@ -11,14 +11,30 @@ void session_t::run()
 {
 	INFO("log");
 	auto self(shared_from_this());
-	auto app = self->app;
-	getline(self, app);
+	socket.async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500),
+		[self](const error_code_t &ec)
+	{
+		if (ec)
+		{
+			INFO("log", ec.message());
+		}
+		else
+		{
+			auto &socket = self->socket;
+			auto re = socket.remote_endpoint();
+			auto address = re.address().to_string();
+			auto port = re.port();
+			cout << address << endl;
+			cout << port << endl;
+			INFO("log", "address:{0} port:{1}", address, port);
+			getline(self);
+		}
+	});
 }
 
 void read_handler(const error_code_t &ec,
 	std::size_t size,
-	shared_ptr<session_t> session,
-	shared_ptr<application_t> app)
+	shared_ptr<session_t> session)
 {
 	INFO("log");
 	if (ec)
@@ -46,19 +62,19 @@ void read_handler(const error_code_t &ec,
 			INFO("log", "async_read_some:{0}", buff.data());
 			session->clear();
 
-			getline(session, app);
+			getline(session);
 		}
 		else
 		{
 			INFO("log");
 			auto r = async_read(session,
-				[session, app](const error_code_t &ec, std::size_t size)
+				[session](const error_code_t &ec, std::size_t size)
 			{
-				read_handler(ec, size, session, app);
+				read_handler(ec, size, session);
 			});
 			if (!r)
 			{
-				app->run();
+				session->socket.get_io_context().run();
 				return;
 			}
 		}
@@ -67,8 +83,7 @@ void read_handler(const error_code_t &ec,
 
 void write_handler(const error_code_t &ec,
 	std::size_t size,
-	shared_ptr<session_t> session,
-	shared_ptr<application_t> app)
+	shared_ptr<session_t> session)
 {
 	INFO("log");
 	if (ec)
@@ -98,32 +113,32 @@ void write_handler(const error_code_t &ec,
 			{
 				session->clear();
 				auto r = async_read(session,
-					[session, app](const error_code_t &ec, std::size_t size)
+					[session](const error_code_t &ec, std::size_t size)
 				{
-					read_handler(ec, size, session, app);
+					read_handler(ec, size, session);
 				});
 				if (!r)
 				{
-					app->run();
+					session->socket.get_io_context().run();
 					return;
 				}
 				return;
 			}
 		}
 		auto w = async_write(session,
-			[session, &app](const error_code_t &ec, std::size_t size)
+			[session](const error_code_t &ec, std::size_t size)
 		{
-			write_handler(ec, size, session, app);
+			write_handler(ec, size, session);
 		});
 		if (!w)
 		{
-			app->run();
+			session->socket.get_io_context().run();
 			return;
 		}
 	}
 }
 
-void getline(shared_ptr<session_t> session, shared_ptr<application_t> app)
+void getline(shared_ptr<session_t> session)
 {
 	string message;
 	if (std::getline(cin, message))
@@ -136,13 +151,13 @@ void getline(shared_ptr<session_t> session, shared_ptr<application_t> app)
 		session->write_queue.push(std::move(vec));
 
 		auto w = async_write(session,
-			[session, app](const error_code_t &ec, std::size_t size)
+			[session](const error_code_t &ec, std::size_t size)
 		{
-			write_handler(ec, size, session, app);
+			write_handler(ec, size, session);
 		});
 		if (!w)
 		{
-			app->run();
+			session->socket.get_io_context().run();
 			return;
 		}
 	}
@@ -151,36 +166,13 @@ void getline(shared_ptr<session_t> session, shared_ptr<application_t> app)
 int main()
 {
 	auto logger = spdlog::stdout_color_mt("log");
-	auto app = make_shared<application_t>();
-	auto &io_context = app->io_context;
+	io_context_t io_context;
 
 	{
-		auto session = make_shared<session_t>(app->io_context);
-		auto &socket = session->socket;
-
-		socket.async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500),
-			[session, app](const error_code_t &ec)
-		{
-			if (ec)
-			{
-				INFO("log", ec.message());
-			}
-			else
-			{
-				session->app = app;
-				auto &socket = session->socket;
-				auto re = socket.remote_endpoint();
-				auto address = re.address().to_string();
-				auto port = re.port();
-				cout << address << endl;
-				cout << port << endl;
-				INFO("log", "address:{0} port:{1}", address, port);
-
-				session->run();
-			}
-		});
+		auto session = make_shared<session_t>(io_context);
+		session->run();
 	}
 
-	app->run();
+	io_context.run();
 	return 0;
 }
