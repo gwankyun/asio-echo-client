@@ -4,8 +4,8 @@
 //#include "pch.h"
 #include "asio_echo_client.h"
 
-std::size_t session_t::read_size = 2;
-std::size_t session_t::write_size = 2;
+//std::size_t session_t::read_size = 2;
+//std::size_t session_t::write_size = 2;
 
 void session_t::run()
 {
@@ -51,7 +51,7 @@ void read_handler(const error_code_t &ec,
 		auto &socket = session->socket;
 		session->is_read = false;
 
-		INFO("log", "session->size:{0} g_one_size:{1} size:{2}", session->read_offset, session_t::read_size, size);
+		//INFO("log", "session->size:{0} g_one_size:{1} size:{2}", session->read_offset, session_t::read_size, size);
 
 		if (buffer[read_offset - 1] == '\0')
 		{
@@ -67,7 +67,7 @@ void read_handler(const error_code_t &ec,
 		else
 		{
 			INFO("log");
-			auto r = async_read(session,
+			auto r = async_read(session, 2,
 				[session](const error_code_t &ec, std::size_t size)
 			{
 				read_handler(ec, size, session);
@@ -112,7 +112,7 @@ void write_handler(const error_code_t &ec,
 			if (write_queue.empty())
 			{
 				session->clear();
-				auto r = async_read(session,
+				auto r = async_read(session, 2,
 					[session](const error_code_t &ec, std::size_t size)
 				{
 					read_handler(ec, size, session);
@@ -125,7 +125,7 @@ void write_handler(const error_code_t &ec,
 				return;
 			}
 		}
-		auto w = async_write(session,
+		auto w = async_write(session, 2,
 			[session](const error_code_t &ec, std::size_t size)
 		{
 			write_handler(ec, size, session);
@@ -150,7 +150,7 @@ void getline(shared_ptr<session_t> session)
 		vec.push_back('\0');
 		session->write_queue.push(std::move(vec));
 
-		auto w = async_write(session,
+		auto w = async_write(session, 2,
 			[session](const error_code_t &ec, std::size_t size)
 		{
 			write_handler(ec, size, session);
