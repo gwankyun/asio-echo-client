@@ -11,7 +11,7 @@ void session_t::run()
 {
 	INFO("log");
 	auto self(shared_from_this());
-	socket.async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500),
+	socket->async_connect(endpoint_t(address_t::from_string("127.0.0.1"), 12500),
 		[self](const error_code_t &ec)
 	{
 		if (ec)
@@ -21,7 +21,7 @@ void session_t::run()
 		else
 		{
 			auto &socket = self->socket;
-			auto re = socket.remote_endpoint();
+			auto re = socket->remote_endpoint();
 			auto address = re.address().to_string();
 			auto port = re.port();
 			cout << address << endl;
@@ -74,7 +74,7 @@ void read_handler(const error_code_t &ec,
 			});
 			if (!r)
 			{
-				session->socket.get_io_context().run();
+				session->socket->get_io_context().run();
 				return;
 			}
 		}
@@ -119,7 +119,7 @@ void write_handler(const error_code_t &ec,
 				});
 				if (!r)
 				{
-					session->socket.get_io_context().run();
+					session->socket->get_io_context().run();
 					return;
 				}
 				return;
@@ -132,7 +132,7 @@ void write_handler(const error_code_t &ec,
 		});
 		if (!w)
 		{
-			session->socket.get_io_context().run();
+			session->socket->get_io_context().run();
 			return;
 		}
 	}
@@ -157,7 +157,7 @@ void getline(shared_ptr<session_t> session)
 		});
 		if (!w)
 		{
-			session->socket.get_io_context().run();
+			session->socket->get_io_context().run();
 			return;
 		}
 	}
@@ -169,7 +169,8 @@ int main()
 	io_context_t io_context;
 
 	{
-		auto session = make_shared<session_t>(io_context);
+		auto socket = make_shared<socket_t>(io_context);
+		auto session = make_shared<session_t>(socket);
 		session->run();
 	}
 
